@@ -32,6 +32,13 @@ if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
     exit 1
 fi
 
+# Проверяем ID проекта
+if [[ -z "$GCP_PROJECT_ID" ]]; then
+    echo "❌ Установите GCP_PROJECT_ID:"
+    echo "export GCP_PROJECT_ID='ваш_проект'"
+    exit 1
+fi
+
 echo -e "${YELLOW}📦 Обновляем зависимости...${NC}"
 go mod tidy
 
@@ -46,7 +53,7 @@ gcloud functions deploy "$FUNCTION_NAME" \
     --entry-point="$ENTRY_POINT" \
     --trigger-http \
     --allow-unauthenticated \
-    --set-env-vars TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+    --set-env-vars TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN",GCP_PROJECT_ID="$GCP_PROJECT_ID" \
     --quiet
 
 echo -e "${GREEN}✅ Готово!${NC}"

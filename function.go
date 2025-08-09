@@ -1,93 +1,101 @@
 package functions
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
+	"encoding/json"
+	"bytes"
 
+	"cloud.google.com/go/firestore"
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 )
 
+// firestoreClient - это наш "пропуск" в картотеку.
+// Мы создаем его один раз, чтобы не делать это при каждом сообщении.
+var firestoreClient *firestore.Client
+
 func init() {
+	// Эта функция выполняется один раз при "прогреве" облачной функции.
+	// Здесь мы настраиваем подключение к Firestore.
+	ctx := context.Background()
+	projectID := os.Getenv("GCP_PROJECT_ID") // Получаем ID проекта из переменной окружения
+	if projectID == "" {
+		log.Fatalf("GCP_PROJECT_ID environment variable must be set.")
+	}
+
+	var err error
+	firestoreClient, err = firestore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Fatalf("Failed to create Firestore client: %v", err)
+	}
+
 	functions.HTTP("TelegramWebhookHandler", telegramWebhookHandler)
 }
 
-// --- Структуры для "расшифровки" JSON от Telegram ---
-
-// Update - это самая внешняя структура, которую присылает Telegram.
+// Update, Message, Chat - структуры для разбора ответа от Telegram.
+// Они остались такими же, как и в эхо-боте.
 type Update struct {
 	Message Message `json:"message"`
 }
-
-// Message содержит информацию о самом сообщении.
 type Message struct {
 	Text string `json:"text"`
 	Chat Chat   `json:"chat"`
 }
-
-// Chat содержит информацию о чате, из которого пришло сообщение.
 type Chat struct {
 	ID int64 `json:"id"`
 }
 
-// --- Логика нашего бота ---
+// Note - это структура нашей "карточки" для сохранения в Firestore.
+type Note struct {
+	Text      string    `firestore:"text"`
+	UserID    int64     `firestore:"userID"`
+	CreatedAt time.Time `firestore:"createdAt"`
+}
 
-// telegramWebhookHandler - главная функция, которая обрабатывает входящий запрос.
 func telegramWebhookHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. "Расшифровываем" входящее обновление от Telegram.
 	var update Update
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		log.Printf("could not decode request: %v", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Проверяем, есть ли в сообщении текст.
 	if update.Message.Text == "" {
-		// Если текста нет (например, прислали стикер), ничего не делаем.
+		return // Не сохраняем пустые сообщения
+	}
+
+	// Создаем новую "карточку"-заметку
+	newNote := Note{
+		Text:      update.Message.Text,
+		UserID:    update.Message.Chat.ID,
+		CreatedAt: time.Now(),
+	}
+
+	// Добавляем нашу "карточку" в ящик (коллекцию) "notes".
+	// Firestore сам присвоит ей уникальный ID.
+	_, _, err := firestoreClient.Collection("notes").Add(context.Background(), newNote)
+	if err != nil {
+		log.Printf("Failed to add note to Firestore: %v", err)
+		// Если не удалось сохранить, сообщим об этом пользователю.
+		sendMessage(update.Message.Chat.ID, "Не удалось сохранить заметку. 😔")
 		return
 	}
 
-	// 2. Отправляем эхо-сообщение обратно пользователю.
-	// Мы передаем ID чата и текст, который нужно отправить.
-	if err := sendMessage(update.Message.Chat.ID, update.Message.Text); err != nil {
-		log.Printf("could not send message: %v", err)
-		// Не отправляем ошибку пользователю, просто логируем у себя.
-	}
-
-	// Отвечаем Telegram "OK", чтобы он понял, что мы получили обновление.
-	fmt.Fprint(w, "OK")
+	// Отправляем пользователю подтверждение.
+	sendMessage(update.Message.Chat.ID, "Заметка сохранена! 👍")
 }
 
-// sendMessage формирует и отправляет запрос к API Telegram.
-func sendMessage(chatID int64, text string) error {
-	// 3. Получаем токен из переменных окружения.
-	// Это безопасный способ хранить секреты.
+// sendMessage осталась такой же, как и раньше.
+// Мы вынесли ее, чтобы не дублировать код.
+func sendMessage(chatID int64, text string) {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if token == "" {
-		return fmt.Errorf("TELEGRAM_BOT_TOKEN not set")
-	}
-
-	// Формируем URL для отправки сообщения.
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
-
-	// Готовим тело запроса в формате JSON: кому и что отправить.
-	requestBody, err := json.Marshal(map[string]interface{}{
+	requestBody, _ := json.Marshal(map[string]interface{}{
 		"chat_id": chatID,
 		"text":    text,
 	})
-	if err != nil {
-		return err
-	}
-
-	// Отправляем HTTP POST запрос в Telegram.
-	_, err = http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
 }

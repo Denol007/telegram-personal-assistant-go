@@ -19,23 +19,19 @@ ENTRY_POINT="TelegramWebhookHandler"
 
 echo -e "${BLUE}🚀 Начинаем деплоймент Telegram бота...${NC}"
 
-# Проверяем, что мы в правильной директории
-if [[ ! -f "function.go" ]]; then
-    echo -e "${RED}❌ Ошибка: файл function.go не найден!${NC}"
-    echo -e "${YELLOW}Убедитесь, что вы запускаете скрипт из директории проекта.${NC}"
-    exit 1
-fi
-
-# Проверяем, что go.mod существует
-if [[ ! -f "go.mod" ]]; then
-    echo -e "${RED}❌ Ошибка: файл go.mod не найден!${NC}"
+# Проверки файлов
+if [[ ! -f "function.go" || ! -f "go.mod" ]]; then
+    echo -e "${RED}❌ Ошибка: файлы function.go и/или go.mod не найдены!${NC}"
+    echo -e "${YELLOW}Убедитесь, что вы запускаете скрипт из корневой директории проекта.${NC}"
     exit 1
 fi
 
 echo -e "${YELLOW}📦 Проверяем зависимости...${NC}"
 go mod tidy
 
-# Проверяем переменную окружения TELEGRAM_BOT_TOKEN
+# --- Проверка переменных окружения ---
+
+# Проверяем токен бота
 if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
     echo -e "${YELLOW}⚠️  Переменная TELEGRAM_BOT_TOKEN не установлена.${NC}"
     echo -e "${BLUE}Введите токен вашего Telegram бота:${NC}"
@@ -47,9 +43,23 @@ if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
     TELEGRAM_BOT_TOKEN="$TOKEN"
 fi
 
+# НОВОЕ: Проверяем ID проекта Google Cloud
+if [[ -z "$GCP_PROJECT_ID" ]]; then
+    echo -e "${YELLOW}⚠️  Переменная GCP_PROJECT_ID не установлена.${NC}"
+    echo -e "${BLUE}Введите ID вашего Google Cloud проекта:${NC}"
+    read -r PROJECT_ID
+    if [[ -z "$PROJECT_ID" ]]; then
+        echo -e "${RED}❌ ID проекта не может быть пустым!${NC}"
+        exit 1
+    fi
+    GCP_PROJECT_ID="$PROJECT_ID"
+fi
+
+
 echo -e "${YELLOW}🔨 Деплоим функцию в Google Cloud...${NC}"
 
-# Выполняем деплоймент
+# --- Выполняем деплоймент ---
+# ИСПРАВЛЕНО: Добавлена переменная GCP_PROJECT_ID
 gcloud functions deploy "$FUNCTION_NAME" \
     --gen2 \
     --runtime="$RUNTIME" \
@@ -58,33 +68,25 @@ gcloud functions deploy "$FUNCTION_NAME" \
     --entry-point="$ENTRY_POINT" \
     --trigger-http \
     --allow-unauthenticated \
-    --set-env-vars TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+    --set-env-vars GCP_PROJECT_ID=$GCP_PROJECT_ID,TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN \
     --quiet
 
+# --- Обработка результата ---
 if [[ $? -eq 0 ]]; then
     echo -e "${GREEN}✅ Деплоймент завершен успешно!${NC}"
     
-    # Получаем URL функции
     FUNCTION_URL=$(gcloud functions describe "$FUNCTION_NAME" --region="$REGION" --format="value(serviceConfig.uri)")
     
     echo -e "${GREEN}🌐 URL функции: ${FUNCTION_URL}${NC}"
-    echo -e "${BLUE}📝 Не забудьте установить webhook в Telegram:${NC}"
-    echo -e "${YELLOW}curl -X POST \"https://api.telegram.org/bot\$TELEGRAM_BOT_TOKEN/setWebhook\" -d \"url=\$FUNCTION_URL\"${NC}"
+    echo -e "${BLUE}📝 Установка webhook в Telegram...${NC}"
     
-    # Предлагаем автоматически установить webhook
-    echo -e "${BLUE}Хотите автоматически установить webhook? (y/n):${NC}"
-    read -r SETUP_WEBHOOK
+    WEBHOOK_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d "url=$FUNCTION_URL")
     
-    if [[ "$SETUP_WEBHOOK" =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}🔗 Устанавливаем webhook...${NC}"
-        WEBHOOK_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d "url=$FUNCTION_URL")
-        
-        if echo "$WEBHOOK_RESPONSE" | grep -q '"ok":true'; then
-            echo -e "${GREEN}✅ Webhook установлен успешно!${NC}"
-        else
-            echo -e "${RED}❌ Ошибка при установке webhook:${NC}"
-            echo "$WEBHOOK_RESPONSE"
-        fi
+    if echo "$WEBHOOK_RESPONSE" | grep -q '"ok":true'; then
+        echo -e "${GREEN}✅ Webhook установлен успешно!${NC}"
+    else
+        echo -e "${RED}❌ Ошибка при установке webhook:${NC}"
+        echo "$WEBHOOK_RESPONSE"
     fi
     
 else

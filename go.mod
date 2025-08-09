@@ -1,4 +1,4 @@
-module example.com/telegram-assistant
+module github.com/Denol007/telegram-personal-assistant-go
 
 go 1.24.6
 

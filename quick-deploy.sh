@@ -16,12 +16,19 @@ FUNCTION_NAME="telegram-webhook-handler"
 REGION="europe-central2"
 RUNTIME="go124"
 ENTRY_POINT="TelegramWebhookHandler"
+SOURCE_DIR="cmd/functions"
 
 echo -e "${BLUE}🔄 Быстрый деплоймент...${NC}"
 
 # Проверяем файлы
-if [[ ! -f "function.go" ]]; then
-    echo "❌ function.go не найден!"
+if [[ ! -f "$SOURCE_DIR/function.go" ]]; then
+    echo "❌ $SOURCE_DIR/function.go не найден!"
+    echo "Убедитесь, что исходный код находится в папке $SOURCE_DIR/"
+    exit 1
+fi
+
+if [[ ! -f "go.mod" ]]; then
+    echo "❌ go.mod не найден в корне проекта!"
     exit 1
 fi
 
@@ -45,6 +52,7 @@ go mod tidy
 echo -e "${YELLOW}🚀 Деплоим...${NC}"
 
 # Быстрый деплоймент
+# Быстрый деплоймент
 gcloud functions deploy "$FUNCTION_NAME" \
     --gen2 \
     --runtime="$RUNTIME" \
@@ -54,6 +62,7 @@ gcloud functions deploy "$FUNCTION_NAME" \
     --trigger-http \
     --allow-unauthenticated \
     --set-env-vars TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN",GCP_PROJECT_ID="$GCP_PROJECT_ID" \
+    --set-build-env-vars GOOGLE_FUNCTION_SOURCE=cmd/functions,GOOGLE_BUILDABLE=./cmd/functions \
     --quiet
 
 echo -e "${GREEN}✅ Готово!${NC}"

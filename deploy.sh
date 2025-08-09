@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Скрипт для быстрого деплоймента Telegram бота в Google Cloud Functions
+# Скрипт для полного деплоймента Telegram бота в Google Cloud Functions
 
 set -e  # Остановить выполнение при любой ошибке
 
@@ -14,15 +14,21 @@ NC='\033[0m' # No Color
 # Конфигурация
 FUNCTION_NAME="telegram-webhook-handler"
 REGION="europe-central2"
-RUNTIME="go124"
+RUNTIME="go124" 
 ENTRY_POINT="TelegramWebhookHandler"
+SOURCE_DIR="cmd/functions"
 
 echo -e "${BLUE}🚀 Начинаем деплоймент Telegram бота...${NC}"
 
 # Проверки файлов
-if [[ ! -f "function.go" || ! -f "go.mod" ]]; then
-    echo -e "${RED}❌ Ошибка: файлы function.go и/или go.mod не найдены!${NC}"
-    echo -e "${YELLOW}Убедитесь, что вы запускаете скрипт из корневой директории проекта.${NC}"
+if [[ ! -f "$SOURCE_DIR/function.go" ]]; then
+    echo -e "${RED}❌ Ошибка: файл $SOURCE_DIR/function.go не найден!${NC}"
+    echo -e "${YELLOW}Убедитесь, что исходный код находится в папке $SOURCE_DIR/.${NC}"
+    exit 1
+fi
+
+if [[ ! -f "go.mod" ]]; then
+    echo -e "${RED}❌ Ошибка: файл go.mod не найден в корне проекта!${NC}"
     exit 1
 fi
 
@@ -43,7 +49,7 @@ if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
     TELEGRAM_BOT_TOKEN="$TOKEN"
 fi
 
-# НОВОЕ: Проверяем ID проекта Google Cloud
+# Проверяем ID проекта Google Cloud
 if [[ -z "$GCP_PROJECT_ID" ]]; then
     echo -e "${YELLOW}⚠️  Переменная GCP_PROJECT_ID не установлена.${NC}"
     echo -e "${BLUE}Введите ID вашего Google Cloud проекта:${NC}"
@@ -59,7 +65,6 @@ fi
 echo -e "${YELLOW}🔨 Деплоим функцию в Google Cloud...${NC}"
 
 # --- Выполняем деплоймент ---
-# ИСПРАВЛЕНО: Добавлена переменная GCP_PROJECT_ID
 gcloud functions deploy "$FUNCTION_NAME" \
     --gen2 \
     --runtime="$RUNTIME" \
@@ -69,6 +74,7 @@ gcloud functions deploy "$FUNCTION_NAME" \
     --trigger-http \
     --allow-unauthenticated \
     --set-env-vars GCP_PROJECT_ID=$GCP_PROJECT_ID,TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN \
+    --set-build-env-vars GOOGLE_FUNCTION_SOURCE=cmd/functions,GOOGLE_BUILDABLE=./cmd/functions \
     --quiet
 
 # --- Обработка результата ---

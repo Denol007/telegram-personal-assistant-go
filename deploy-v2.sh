@@ -24,7 +24,7 @@ FUNCTION_NAME=${FUNCTION_NAME:-telegram-webhook-handler}
 REGION=${GOOGLE_CLOUD_REGION:-europe-central2}
 RUNTIME=${GO_RUNTIME:-go124}
 ENTRY_POINT=${ENTRY_POINT:-TelegramWebhookHandler}
-SOURCE_DIR=${SOURCE_DIR:-cmd/functions}
+SOURCE_DIR=${SOURCE_DIR:-.}
 SOURCE_ROOT=${SOURCE_ROOT:-.}
 
 # Обязательные переменные
@@ -32,8 +32,8 @@ SOURCE_ROOT=${SOURCE_ROOT:-.}
 : "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN не задан}"
 
 # Проверки
-if [[ ! -f "${SOURCE_DIR}/function.go" ]]; then
-  echo -e "${RED}❌ Не найден файл ${SOURCE_DIR}/function.go${NC}"
+if [[ ! -f "function.go" ]]; then
+  echo -e "${RED}❌ Не найден файл function.go${NC}"
   exit 1
 fi
 if [[ ! -f go.mod ]]; then
@@ -55,8 +55,7 @@ gcloud functions deploy "${FUNCTION_NAME}" \
   --entry-point="${ENTRY_POINT}" \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars "GCP_PROJECT_ID=${GCP_PROJECT_ID},TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
-  --set-build-env-vars "GOOGLE_FUNCTION_SOURCE_DIR=${SOURCE_DIR}"
+  --set-env-vars "GCP_PROJECT_ID=${GCP_PROJECT_ID},TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
 
 # Вывести URL
 echo -e "${GREEN}✅ Деплой завершён.${NC}"

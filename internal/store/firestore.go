@@ -1,37 +1,61 @@
+// Файл: internal/store/firestore.go
 package store
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"os"
 
 	"cloud.google.com/go/firestore"
-	"github.com/Denol007/telegram-personal-assistant-go/internal/note" // Импортируем наш пакет note
+	"google.golang.org/api/iterator"
+	"github.com/Denol007/telegram-personal-assistant-go/internal/note"
 )
 
-var client *firestore.Client
-
-
-func Init() {
-	ctx := context.Background()
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	if projectID == "" {
-		log.Printf("GCP_PROJECT_ID environment variable must be set.")
-		return
-	}
-	var err error
-	client, err = firestore.NewClient(ctx, projectID)
-	if err != nil {
-		log.Printf("Failed to create Firestore client: %v", err)
-		return
-	}
+// Store - это наше хранилище.
+type Store struct {
+	client *firestore.Client
 }
 
-
-func SaveNote(ctx context.Context, n note.Note) error {
-	if client == nil {
-		return nil // no-op if Firestore not initialized; caller may log success in dev
+// New создает новое подключение к хранилищу.
+func New(projectID string) (*Store, error) {
+	client, err := firestore.NewClient(context.Background(), projectID)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка создания клиента Firestore: %w", err)
 	}
-	_, _, err := client.Collection("notes").Add(ctx, n)
+	return &Store{client: client}, nil
+}
+
+// SaveNote сохраняет заметку в Firestore.
+func (s *Store) SaveNote(ctx context.Context, n note.Note) error {
+	_, _, err := s.client.Collection("notes").Add(ctx, n)
 	return err
+}
+
+// GetAllNotesByUser находит все заметки для указанного пользователя.
+func (s *Store) GetAllNotesByUser(ctx context.Context, userID int64) ([]note.Note, error) {
+	var notes []note.Note
+
+	query := s.client.Collection("notes").
+		Where("userID", "==", userID).
+		OrderBy("createdAt", firestore.Desc)
+
+	iter := query.Documents(ctx)
+	defer iter.Stop()
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("ошибка итерации: %w", err)
+		}
+
+		var n note.Note
+		if err := doc.DataTo(&n); err != nil {
+			log.Printf("ошибка преобразования документа %s: %v", doc.Ref.ID, err)
+			continue
+		}
+		notes = append(notes, n)
+	}
+	return notes, nil
 }

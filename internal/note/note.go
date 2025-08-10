@@ -1,3 +1,4 @@
+// Файл: internal/note/note.go
 package note
 
 import "time"

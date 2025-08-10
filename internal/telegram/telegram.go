@@ -1,11 +1,12 @@
+// Файл: internal/telegram/telegram.go
 package telegram
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"os"
 )
 
 // Структуры для разбора ответа от Telegram.
@@ -21,12 +22,26 @@ type Chat struct {
 }
 
 // Send отправляет сообщение в указанный чат Telegram.
-func Send(chatID int64, text string) {
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+func Send(token string, chatID int64, text string) {
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
-	requestBody, _ := json.Marshal(map[string]interface{}{
+
+	requestBody, err := json.Marshal(map[string]interface{}{
 		"chat_id": chatID,
 		"text":    text,
 	})
-	http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Printf("Telegram Send: ошибка marshal json: %v", err)
+		return
+	}
+
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Printf("Telegram Send: ошибка отправки запроса: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		log.Printf("Telegram Send: получен статус %d", resp.StatusCode)
+	}
 }

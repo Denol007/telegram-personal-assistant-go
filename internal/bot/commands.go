@@ -17,12 +17,12 @@ func (h *Handler) handleListCommand(chatID int64) {
 	notes, err := h.store.GetAllNotesByUser(context.Background(), chatID)
 	if err != nil {
 		log.Printf("ошибка получения заметок: %v", err)
-		telegram.Send(h.token, chatID, "не удалось получить заметки :(")
+		telegram.Send(h.token, chatID, "не удалось получить заметки :(", nil)
 		return
 	}
 
 	if len(notes) == 0 {
-		telegram.Send(h.token, chatID, "У тебя пока нет заметок.")
+		telegram.Send(h.token, chatID, "У тебя пока нет заметок.", nil)
 		return
 	}
 
@@ -32,7 +32,7 @@ func (h *Handler) handleListCommand(chatID int64) {
 		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, n.Text))
 	}
 
-	telegram.Send(h.token, chatID, sb.String())
+	telegram.Send(h.token, chatID, sb.String(), nil)
 }
 
 func (h *Handler) handleDeleteCommand(chatID int64, text string) {
@@ -40,19 +40,19 @@ func (h *Handler) handleDeleteCommand(chatID int64, text string) {
 	_, err := fmt.Sscanf(text, "/delete %d", &noteNumber)
 	if err != nil {
 		log.Printf("Неправильный формат команды: %s", text)
-		telegram.Send(h.token, chatID, "Пожалуйста, укажи номер заметки, например: /delete 3")
+		telegram.Send(h.token, chatID, "Пожалуйста, укажи номер заметки, например: /delete 3", nil)
 		return
 	}
 
 	notes, err := h.store.GetAllNotesByUser(context.Background(), chatID)
 	if err != nil {
     	log.Printf("ошибка получения заметок: %v", err)
-    	telegram.Send(h.token, chatID, "Не удалось получить заметки")
+    	telegram.Send(h.token, chatID, "Не удалось получить заметки", nil)
     	return
 	}
 
 	if noteNumber < 1 || noteNumber > len(notes) {
-		telegram.Send(h.token, chatID, "Заметки с таким номером не существует.")
+		telegram.Send(h.token, chatID, "Заметки с таким номером не существует.", nil)
     	return
 	} else {
 		noteToDelete := notes[noteNumber-1]
@@ -82,6 +82,8 @@ func (h *Handler) handleDeleteCommand(chatID int64, text string) {
 
 }
 
+
+
 // handleSaveNote обрабатывает сохранение новой заметки.
 func (h *Handler) handleSaveNote(chatID int64, text string) {
 	newNote := note.Note{
@@ -92,10 +94,10 @@ func (h *Handler) handleSaveNote(chatID int64, text string) {
 
 	if err := h.store.SaveNote(context.Background(), newNote); err != nil {
 		log.Printf("Failed to save note: %v", err)
-		telegram.Send(h.token, chatID, "Не удалось сохранить заметку. 😔")
+		telegram.Send(h.token, chatID, "Не удалось сохранить заметку. 😔", nil)
 		return
 	}
-	telegram.Send(h.token, chatID, "Заметка сохранена! 👍")
+	telegram.Send(h.token, chatID, "Заметка сохранена! 👍", nil)
 }
 
 // handleCallbackQuery обрабатывает нажатия на инлайн-кнопки.
@@ -109,7 +111,7 @@ func (h *Handler) handleCallbackQuery(callbackQuery *telegram.CallbackQuery) {
 	// Проверяем, какая кнопка была нажата
 	if data == "cancel_delete" {
 		// Пользователь отменил удаление
-		telegram.Send(h.token, chatID, "Удаление отменено.")
+		telegram.Send(h.token, chatID, "Удаление отменено.", nil)
 	} else if strings.HasPrefix(data, "delete_note:") {
 		// Пользователь подтвердил удаление
 		// Извлекаем ID заметки из callback data
@@ -123,8 +125,81 @@ func (h *Handler) handleConfirmDelete(chatID int64, noteID string) {
 	err := h.store.DeleteNote(context.Background(), noteID)
 	if err != nil {
 		log.Printf("ошибка удаления заметки %s: %v", noteID, err)
-		telegram.Send(h.token, chatID, "Не удалось удалить заметку :(")
+		telegram.Send(h.token, chatID, "Не удалось удалить заметку :(", nil)
 		return
 	}
-	telegram.Send(h.token, chatID, "Заметка успешно удалена! 🗑️")
+	telegram.Send(h.token, chatID, "Заметка успешно удалена! 🗑️", nil)
+}
+
+
+func (h *Handler) handleEditCommand(chatID int64, text string) {
+	var noteNumber int
+	_, err := fmt.Sscanf(text, "/edit %d", &noteNumber)
+	if err != nil {
+		log.Printf("Неправильный формат команды: %s", text)
+		telegram.Send(h.token, chatID, "Пожалуйста, укажи номер заметки, например: /edit 3", nil)
+		return
+	}
+
+	notes, err := h.store.GetAllNotesByUser(context.Background(), chatID)
+	if err != nil {
+		log.Printf("ошибка получения заметок: %v", err)
+		telegram.Send(h.token, chatID, "Не удалось получить заметки", nil)
+		return
+	}
+
+	if noteNumber < 1 || noteNumber > len(notes) {
+		telegram.Send(h.token, chatID, "Заметки с таким номером не существует.", nil)
+		return
+	}
+
+	noteToEdit := notes[noteNumber-1]
+	
+	// Формируем сообщение с текущим текстом заметки и скрытым ID
+	messageText := fmt.Sprintf("Текущий текст заметки:\n\n\"%s\"\n\nОтправь новый текст заметки:\nedit_note:%s", noteToEdit.Text, noteToEdit.ID)
+	
+	// Создаем ForceReply
+	forceReply := telegram.ForceReply{
+		ForceReply:            true,
+		InputFieldPlaceholder: "Введи новый текст заметки...",
+		Selective:             false,
+	}
+	
+	// Отправляем сообщение с ForceReply
+	telegram.Send(h.token, chatID, messageText, &forceReply)
+}
+
+// handleEditResponse обрабатывает ответ пользователя на запрос редактирования заметки.
+func (h *Handler) handleEditResponse(chatID int64, noteID string, newText string) {
+	err := h.store.UpdateNote(context.Background(), noteID, newText)
+	if err != nil {
+		log.Printf("ошибка обновления заметки %s: %v", noteID, err)
+		telegram.Send(h.token, chatID, "Не удалось обновить заметку :(", nil)
+		return
+	}
+	telegram.Send(h.token, chatID, "Заметка успешно обновлена! ✏️", nil)
+}
+
+// handleReplyMessage обрабатывает ответы пользователя на ForceReply.
+func (h *Handler) handleReplyMessage(chatID int64, text string, replyToMessage *telegram.Message) {
+	// Проверяем, содержит ли исходное сообщение информацию о редактировании заметки
+	if strings.Contains(replyToMessage.Text, "edit_note:") {
+		// Извлекаем ID заметки из текста исходного сообщения
+		// Ищем паттерн "edit_note:ID" в тексте
+		lines := strings.Split(replyToMessage.Text, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "edit_note:") {
+				// Извлекаем ID из строки вида "Отправь новый текст заметки: edit_note:abc123"
+				parts := strings.Split(line, "edit_note:")
+				if len(parts) >= 2 {
+					noteID := strings.TrimSpace(parts[1])
+					h.handleEditResponse(chatID, noteID, text)
+					return
+				}
+			}
+		}
+	}
+	
+	// Если не удалось определить тип ответа, сохраняем как новую заметку
+	h.handleSaveNote(chatID, text)
 }

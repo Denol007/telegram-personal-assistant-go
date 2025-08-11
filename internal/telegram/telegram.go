@@ -16,8 +16,9 @@ type Update struct {
 }
 
 type Message struct {
-	Text string `json:"text"`
-	Chat Chat   `json:"chat"`
+	Text           string   `json:"text"`
+	Chat           Chat     `json:"chat"`
+	ReplyToMessage *Message `json:"reply_to_message"`
 }
 
 type Chat struct {
@@ -45,28 +46,31 @@ type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
 }
 
+// ForceReply заставляет пользователя ответить на сообщение.
+type ForceReply struct {
+	ForceReply            bool   `json:"force_reply"`
+	InputFieldPlaceholder string `json:"input_field_placeholder,omitempty"`
+	Selective             bool   `json:"selective,omitempty"`
+}
+
 // sendMessagePayload представляет тело запроса для метода sendMessage.
 type sendMessagePayload struct {
-	ChatID      int64                 `json:"chat_id"`
-	Text        string                `json:"text"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ChatID      int64       `json:"chat_id"`
+	Text        string      `json:"text"`
+	// ReplyMarkup может быть либо клавиатурой, либо ForceReply.
+	// `interface{}` позволяет нам использовать и то, и другое.
+	ReplyMarkup interface{} `json:"reply_markup,omitempty"`
 }
 
 
-// Send отправляет сообщение в указанный чат Telegram, опционально с клавиатурой.
-func Send(token string, chatID int64, text string, keyboard ...*InlineKeyboardMarkup) {
+// Send отправляет сообщение в указанный чат Telegram, опционально с разметкой.
+func Send(token string, chatID int64, text string, markup interface{}) {
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 
-	var replyMarkup *InlineKeyboardMarkup
-	if len(keyboard) > 0 {
-		replyMarkup = keyboard[0]
-	}
-
-	// Создаем тело запроса с помощью нашей новой структуры
 	payload := sendMessagePayload{
 		ChatID:      chatID,
 		Text:        text,
-		ReplyMarkup: replyMarkup,
+		ReplyMarkup: markup,
 	}
 
 	requestBody, err := json.Marshal(payload)

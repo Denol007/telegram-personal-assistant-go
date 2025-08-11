@@ -70,3 +70,14 @@ func (s *Store) DeleteNote(ctx context.Context, noteID string) error {
 	}
 	return nil
 }
+
+// UpdateNote обновляет текст заметки по ID.
+func (s *Store) UpdateNote(ctx context.Context, noteID string, newText string) error {
+	_, err := s.client.Collection("notes").Doc(noteID).Update(ctx, []firestore.Update{
+		{Path: "text", Value: newText},
+	})
+	if err != nil {
+		return fmt.Errorf("ошибка обновления заметки %s: %w", noteID, err)
+	}
+	return nil
+}

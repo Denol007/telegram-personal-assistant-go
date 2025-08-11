@@ -44,12 +44,22 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Проверяем, является ли это ответом на ForceReply (редактирование заметки)
+	if update.Message.ReplyToMessage != nil {
+		h.handleReplyMessage(update.Message.Chat.ID, update.Message.Text, update.Message.ReplyToMessage)
+		return
+	}
+
 	// Разбор команд
 	if strings.HasPrefix(update.Message.Text, "/list") {
 		h.handleListCommand(update.Message.Chat.ID)
 
 	} else if strings.HasPrefix(update.Message.Text, "/delete") {
 		h.handleDeleteCommand(update.Message.Chat.ID, update.Message.Text)
+
+	} else if strings.HasPrefix(update.Message.Text, "/edit") {
+		h.handleEditCommand(update.Message.Chat.ID, update.Message.Text)
+
 	} else {
 		// Действие по умолчанию - сохранить заметку
 		h.handleSaveNote(update.Message.Chat.ID, update.Message.Text)

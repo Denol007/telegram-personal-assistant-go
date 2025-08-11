@@ -33,13 +33,23 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if update.Message.Text == "" {
+	// Сначала проверяем, не пришел ли CallbackQuery
+	if update.CallbackQuery != nil {
+		h.handleCallbackQuery(update.CallbackQuery)
+		return
+	}
+
+	// Если это не CallbackQuery, проверяем обычное сообщение
+	if update.Message == nil || update.Message.Text == "" {
 		return
 	}
 
 	// Разбор команд
 	if strings.HasPrefix(update.Message.Text, "/list") {
 		h.handleListCommand(update.Message.Chat.ID)
+
+	} else if strings.HasPrefix(update.Message.Text, "/delete") {
+		h.handleDeleteCommand(update.Message.Chat.ID, update.Message.Text)
 	} else {
 		// Действие по умолчанию - сохранить заметку
 		h.handleSaveNote(update.Message.Chat.ID, update.Message.Text)

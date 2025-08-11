@@ -8,4 +8,5 @@ type Note struct {
 	Text      string    `firestore:"text"`
 	UserID    int64     `firestore:"userID"`
 	CreatedAt time.Time `firestore:"createdAt"`
+	ID        string    `firestore:"-"`
 }

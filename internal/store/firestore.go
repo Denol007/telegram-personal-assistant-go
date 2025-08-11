@@ -55,7 +55,18 @@ func (s *Store) GetAllNotesByUser(ctx context.Context, userID int64) ([]note.Not
 			log.Printf("ошибка преобразования документа %s: %v", doc.Ref.ID, err)
 			continue
 		}
+		 n.ID = doc.Ref.ID
+
 		notes = append(notes, n)
 	}
 	return notes, nil
+}
+
+// DeleteNote удаляет заметку по ID.
+func (s *Store) DeleteNote(ctx context.Context, noteID string) error {
+	_, err := s.client.Collection("notes").Doc(noteID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("ошибка удаления заметки %s: %w", noteID, err)
+	}
+	return nil
 }

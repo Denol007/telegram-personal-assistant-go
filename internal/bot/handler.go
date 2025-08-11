@@ -40,7 +40,18 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Если это не CallbackQuery, проверяем обычное сообщение
-	if update.Message == nil || update.Message.Text == "" {
+	if update.Message == nil {
+		return
+	}
+
+	// Проверяем, есть ли фотография в сообщении
+	if len(update.Message.Photo) > 0 {
+		h.handleSavePhoto(update.Message.Chat.ID, update.Message.Photo, update.Message.Caption)
+		return
+	}
+
+	// Если нет текста, игнорируем сообщение
+	if update.Message.Text == "" {
 		return
 	}
 
@@ -53,6 +64,9 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Разбор команд
 	if strings.HasPrefix(update.Message.Text, "/list") {
 		h.handleListCommand(update.Message.Chat.ID)
+
+	} else if strings.HasPrefix(update.Message.Text, "/show") {
+		h.handleShowCommand(update.Message.Chat.ID, update.Message.Text)
 
 	} else if strings.HasPrefix(update.Message.Text, "/delete") {
 		h.handleDeleteCommand(update.Message.Chat.ID, update.Message.Text)

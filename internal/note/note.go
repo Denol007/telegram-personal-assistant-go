@@ -8,5 +8,6 @@ type Note struct {
 	Text      string    `firestore:"text"`
 	UserID    int64     `firestore:"userID"`
 	CreatedAt time.Time `firestore:"createdAt"`
+	PhotoID   string    `firestore:"photoID,omitempty"` // ID фото в Telegram
 	ID        string    `firestore:"-"`
 }

@@ -81,3 +81,19 @@ func (s *Store) UpdateNote(ctx context.Context, noteID string, newText string) e
 	}
 	return nil
 }
+
+// GetNoteByID получает заметку по ID.
+func (s *Store) GetNoteByID(ctx context.Context, noteID string) (*note.Note, error) {
+	doc, err := s.client.Collection("notes").Doc(noteID).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка получения заметки %s: %w", noteID, err)
+	}
+
+	var n note.Note
+	if err := doc.DataTo(&n); err != nil {
+		return nil, fmt.Errorf("ошибка преобразования заметки %s: %w", noteID, err)
+	}
+	
+	n.ID = doc.Ref.ID
+	return &n, nil
+}

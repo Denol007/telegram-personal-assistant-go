@@ -29,7 +29,11 @@ func (h *Handler) handleListCommand(chatID int64) {
 	var sb strings.Builder
 	sb.WriteString("Твои последние заметки:\n")
 	for i, n := range notes {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, n.Text))
+		if n.PhotoID != "" {
+			sb.WriteString(fmt.Sprintf("%d. 📸 %s\n", i+1, n.Text))
+		} else {
+			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, n.Text))
+		}
 	}
 
 	telegram.Send(h.token, chatID, sb.String(), nil)
@@ -100,6 +104,35 @@ func (h *Handler) handleSaveNote(chatID int64, text string) {
 	telegram.Send(h.token, chatID, "Заметка сохранена! 👍", nil)
 }
 
+// handleSavePhoto обрабатывает сохранение фотографии.
+func (h *Handler) handleSavePhoto(chatID int64, photo []telegram.PhotoSize, caption string) {
+	// Выбираем фото наибольшего размера (последнее в массиве)
+	var photoID string
+	if len(photo) > 0 {
+		photoID = photo[len(photo)-1].FileID
+	}
+
+	// Используем подпись как текст заметки, или "Фото" если подписи нет
+	text := caption
+	if text == "" {
+		text = "Фото"
+	}
+
+	newNote := note.Note{
+		Text:      text,
+		UserID:    chatID,
+		CreatedAt: time.Now(),
+		PhotoID:   photoID,
+	}
+
+	if err := h.store.SaveNote(context.Background(), newNote); err != nil {
+		log.Printf("Failed to save photo note: %v", err)
+		telegram.Send(h.token, chatID, "Не удалось сохранить фото. 😔", nil)
+		return
+	}
+	telegram.Send(h.token, chatID, "Фото сохранено! 📸", nil)
+}
+
 // handleCallbackQuery обрабатывает нажатия на инлайн-кнопки.
 func (h *Handler) handleCallbackQuery(callbackQuery *telegram.CallbackQuery) {
 	chatID := callbackQuery.Message.Chat.ID
@@ -112,11 +145,14 @@ func (h *Handler) handleCallbackQuery(callbackQuery *telegram.CallbackQuery) {
 	if data == "cancel_delete" {
 		// Пользователь отменил удаление
 		telegram.Send(h.token, chatID, "Удаление отменено.", nil)
+	} else if strings.HasPrefix(data, "edit_note:") {
+		// Пользователь нажал кнопку редактирования
+		noteID := strings.TrimPrefix(data, "edit_note:")
+		h.handleEditFromCallback(chatID, noteID)
 	} else if strings.HasPrefix(data, "delete_note:") {
-		// Пользователь подтвердил удаление
-		// Извлекаем ID заметки из callback data
+		// Пользователь нажал кнопку удаления
 		noteID := strings.TrimPrefix(data, "delete_note:")
-		h.handleConfirmDelete(chatID, noteID)
+		h.handleDeleteFromCallback(chatID, noteID)
 	}
 }
 
@@ -129,6 +165,63 @@ func (h *Handler) handleConfirmDelete(chatID int64, noteID string) {
 		return
 	}
 	telegram.Send(h.token, chatID, "Заметка успешно удалена! 🗑️", nil)
+}
+
+// handleEditFromCallback обрабатывает нажатие кнопки "Редактировать".
+func (h *Handler) handleEditFromCallback(chatID int64, noteID string) {
+	// Получаем заметку по ID
+	note, err := h.store.GetNoteByID(context.Background(), noteID)
+	if err != nil {
+		log.Printf("ошибка получения заметки %s: %v", noteID, err)
+		telegram.Send(h.token, chatID, "Не удалось найти заметку", nil)
+		return
+	}
+
+	// Формируем сообщение с текущим текстом заметки и скрытым ID
+	messageText := fmt.Sprintf("Текущий текст заметки:\n\n\"%s\"\n\nОтправь новый текст заметки:\nedit_note:%s", note.Text, note.ID)
+	
+	// Создаем ForceReply
+	forceReply := telegram.ForceReply{
+		ForceReply:            true,
+		InputFieldPlaceholder: "Введи новый текст заметки...",
+		Selective:             false,
+	}
+	
+	// Отправляем сообщение с ForceReply
+	telegram.Send(h.token, chatID, messageText, &forceReply)
+}
+
+// handleDeleteFromCallback обрабатывает нажатие кнопки "Удалить".
+func (h *Handler) handleDeleteFromCallback(chatID int64, noteID string) {
+	// Получаем заметку по ID
+	note, err := h.store.GetNoteByID(context.Background(), noteID)
+	if err != nil {
+		log.Printf("ошибка получения заметки %s: %v", noteID, err)
+		telegram.Send(h.token, chatID, "Не удалось найти заметку", nil)
+		return
+	}
+
+	// Формируем текст сообщения
+	messageText := fmt.Sprintf("Вы уверены, что хотите удалить заметку?\n\n\"%s\"", note.Text)
+	
+	// Создаем клавиатуру с кнопками подтверждения
+	keyboard := telegram.InlineKeyboardMarkup{
+		InlineKeyboard: [][]telegram.InlineKeyboardButton{
+			{
+				{
+					Text:         "Удалить",
+					CallbackData: fmt.Sprintf("delete_note:%s", note.ID),
+				},
+				{
+					Text:         "Отмена",
+					CallbackData: "cancel_delete",
+				},
+			},
+		},
+	}
+	
+	// Отправляем сообщение с клавиатурой
+	telegram.Send(h.token, chatID, messageText, &keyboard)
 }
 
 
@@ -202,4 +295,53 @@ func (h *Handler) handleReplyMessage(chatID int64, text string, replyToMessage *
 	
 	// Если не удалось определить тип ответа, сохраняем как новую заметку
 	h.handleSaveNote(chatID, text)
+}
+
+// handleShowCommand обрабатывает команду /show для отображения заметки с кнопками.
+func (h *Handler) handleShowCommand(chatID int64, text string) {
+	var noteNumber int
+	_, err := fmt.Sscanf(text, "/show %d", &noteNumber)
+	if err != nil {
+		log.Printf("Неправильный формат команды: %s", text)
+		telegram.Send(h.token, chatID, "Пожалуйста, укажи номер заметки, например: /show 3", nil)
+		return
+	}
+
+	notes, err := h.store.GetAllNotesByUser(context.Background(), chatID)
+	if err != nil {
+		log.Printf("ошибка получения заметок: %v", err)
+		telegram.Send(h.token, chatID, "Не удалось получить заметки", nil)
+		return
+	}
+
+	if noteNumber < 1 || noteNumber > len(notes) {
+		telegram.Send(h.token, chatID, "Заметки с таким номером не существует.", nil)
+		return
+	}
+
+	note := notes[noteNumber-1]
+	
+	// Создаем клавиатуру с кнопками редактирования и удаления
+	keyboard := telegram.InlineKeyboardMarkup{
+		InlineKeyboard: [][]telegram.InlineKeyboardButton{
+			{
+				{
+					Text:         "✏️ Редактировать",
+					CallbackData: fmt.Sprintf("edit_note:%s", note.ID),
+				},
+				{
+					Text:         "🗑️ Удалить",
+					CallbackData: fmt.Sprintf("delete_note:%s", note.ID),
+				},
+			},
+		},
+	}
+
+	// Если это заметка с фото, отправляем фото
+	if note.PhotoID != "" {
+		telegram.SendPhoto(h.token, chatID, note.PhotoID, note.Text, &keyboard)
+	} else {
+		// Если это текстовая заметка, отправляем текст
+		telegram.Send(h.token, chatID, note.Text, &keyboard)
+	}
 }

@@ -16,9 +16,19 @@ type Update struct {
 }
 
 type Message struct {
-	Text           string   `json:"text"`
-	Chat           Chat     `json:"chat"`
-	ReplyToMessage *Message `json:"reply_to_message"`
+	Text           string      `json:"text"`
+	Caption        string      `json:"caption"`
+	Photo          []PhotoSize `json:"photo"`
+	Chat           Chat        `json:"chat"`
+	ReplyToMessage *Message    `json:"reply_to_message"`
+}
+
+type PhotoSize struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	FileSize     int    `json:"file_size,omitempty"`
 }
 
 type Chat struct {
@@ -114,5 +124,42 @@ func AnswerCallbackQuery(token string, callbackQueryID string) {
 
 	if resp.StatusCode >= 300 {
 		log.Printf("Telegram AnswerCallbackQuery: получен статус %d", resp.StatusCode)
+	}
+}
+
+// sendPhotoPayload представляет тело запроса для метода sendPhoto.
+type sendPhotoPayload struct {
+	ChatID      int64       `json:"chat_id"`
+	Photo       string      `json:"photo"`
+	Caption     string      `json:"caption,omitempty"`
+	ReplyMarkup interface{} `json:"reply_markup,omitempty"`
+}
+
+// SendPhoto отправляет фотографию в указанный чат Telegram.
+func SendPhoto(token string, chatID int64, photoID string, caption string, markup interface{}) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto", token)
+
+	payload := sendPhotoPayload{
+		ChatID:      chatID,
+		Photo:       photoID,
+		Caption:     caption,
+		ReplyMarkup: markup,
+	}
+
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Telegram SendPhoto: ошибка marshal json: %v", err)
+		return
+	}
+
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Printf("Telegram SendPhoto: ошибка отправки запроса: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		log.Printf("Telegram SendPhoto: получен статус %d", resp.StatusCode)
 	}
 }

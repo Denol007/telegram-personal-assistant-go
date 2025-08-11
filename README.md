@@ -1,5 +1,9 @@
 # Telegram Personal Assistant Bot
 
+[![CI/CD Pipeline](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/ci-cd.yml)
+[![Code Quality](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/quality.yml/badge.svg)](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/quality.yml)
+[![Security](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/security.yml/badge.svg)](https://github.com/Denol007/telegram-personal-assistant-go/actions/workflows/security.yml)
+
 A personal assistant Telegram bot written in Go using Google Cloud Functions and Firestore for note storage.
 
 ## ✨ Features
@@ -38,12 +42,28 @@ source .env.local
 
 ### 2. Deployment
 
-#### Automatic deployment (recommended)
+#### CI/CD Deployment (recommended)
+The project includes automated CI/CD pipeline using GitHub Actions:
+
+1. **Automatic deployment**: Push to `main` branch triggers automatic deployment to Google Cloud Functions
+2. **Quality checks**: Every PR runs tests, linting, and security scans
+3. **Required secrets** in GitHub repository settings:
+   - `GCP_SA_KEY` - Google Cloud Service Account JSON key
+   - `GCP_PROJECT_ID` - Your Google Cloud project ID
+   - `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
+
+To set up CI/CD:
+1. Create a Google Cloud Service Account with Cloud Functions permissions
+2. Download the JSON key file
+3. Add the secrets to your GitHub repository settings
+4. Push to main branch - deployment will happen automatically!
+
+#### Manual deployment
 ```bash
 ./deploy-v2.sh
 ```
 
-#### Manual deployment
+#### Manual deployment (detailed)
 ```bash
 gcloud functions deploy telegram-webhook-handler \
   --gen2 \
@@ -101,6 +121,47 @@ telegram-assistant/
 go mod download
 ```
 
+### Code Quality
+
+```bash
+# Check compilation
+go build -o /dev/null .
+
+# Format code
+go fmt ./...
+
+# Run linter (requires golangci-lint)
+golangci-lint run
+
+# Run tests
+go test ./...
+
+# Run tests with coverage
+go test -v -race -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### CI/CD Pipeline
+
+The project uses GitHub Actions for automated CI/CD:
+
+- **CI Pipeline**: Runs on every push and PR
+  - Code formatting checks
+  - Linting with golangci-lint
+  - Build verification
+  - Test execution
+  - Security scanning
+
+- **CD Pipeline**: Runs on main branch pushes
+  - Deploys to Google Cloud Functions
+  - Updates function environment variables
+  - Outputs deployment URL
+
+- **Quality Pipeline**: 
+  - Code coverage reporting
+  - Dependency vulnerability scanning
+  - Automated dependency updates (weekly)
+
 ### Local Testing
 
 ```bash
@@ -113,19 +174,6 @@ export GCP_PROJECT_ID="your_project"
 
 # Run locally
 functions-framework --target TelegramWebhookHandler
-```
-
-### Code Verification
-
-```bash
-# Check compilation
-go build -o /dev/null .
-
-# Format code
-go fmt ./...
-
-# Run linter (requires golangci-lint)
-golangci-lint run
 ```
 
 ### View Logs
@@ -159,6 +207,7 @@ gcloud functions delete telegram-webhook-handler --region=europe-central2
 
 ## 🔒 Environment Variables
 
+### Runtime Environment
 ```bash
 # Required
 TELEGRAM_BOT_TOKEN=your_bot_token_here
@@ -170,6 +219,43 @@ GOOGLE_CLOUD_REGION=europe-central2
 GO_RUNTIME=go124
 ENTRY_POINT=TelegramWebhookHandler
 ```
+
+### CI/CD Secrets (GitHub Repository Settings)
+```bash
+# Required for automated deployment
+GCP_SA_KEY={"type":"service_account",...}  # Google Cloud Service Account JSON
+GCP_PROJECT_ID=your-gcp-project-id         # Same as runtime
+TELEGRAM_BOT_TOKEN=your_bot_token_here      # Same as runtime
+```
+
+### Setting up CI/CD Secrets
+
+1. **Google Cloud Service Account**:
+   ```bash
+   # Create service account
+   gcloud iam service-accounts create github-actions \
+     --description="GitHub Actions deployment" \
+     --display-name="GitHub Actions"
+
+   # Grant necessary permissions
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/cloudfunctions.developer"
+
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/iam.serviceAccountUser"
+
+   # Create and download key
+   gcloud iam service-accounts keys create key.json \
+     --iam-account=github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   ```
+
+2. **Add to GitHub Secrets**:
+   - Go to your repository → Settings → Secrets and variables → Actions
+   - Add `GCP_SA_KEY` with the content of `key.json`
+   - Add `GCP_PROJECT_ID` with your project ID
+   - Add `TELEGRAM_BOT_TOKEN` with your bot token
 
 ## 🔗 Useful Links
 

@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"github.com/Denol007/telegram-personal-assistant-go/internal/note"
+	"google.golang.org/api/iterator"
 )
 
 // Store - это наше хранилище.
@@ -55,7 +55,7 @@ func (s *Store) GetAllNotesByUser(ctx context.Context, userID int64) ([]note.Not
 			log.Printf("ошибка преобразования документа %s: %v", doc.Ref.ID, err)
 			continue
 		}
-		 n.ID = doc.Ref.ID
+		n.ID = doc.Ref.ID
 
 		notes = append(notes, n)
 	}

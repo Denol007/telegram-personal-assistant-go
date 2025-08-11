@@ -5,10 +5,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 	"github.com/Denol007/telegram-personal-assistant-go/internal/bot"
 	"github.com/Denol007/telegram-personal-assistant-go/internal/config"
 	"github.com/Denol007/telegram-personal-assistant-go/internal/store"
+	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 )
 
 var botHandler *bot.Handler

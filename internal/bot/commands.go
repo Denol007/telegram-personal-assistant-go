@@ -36,7 +36,7 @@ func (h *Handler) handleListCommand(chatID int64) {
 }
 
 func (h *Handler) handleDeleteCommand(chatID int64, text string) {
-	var noteNumber int 
+	var noteNumber int
 	_, err := fmt.Sscanf(text, "/delete %d", &noteNumber)
 	if err != nil {
 		log.Printf("Неправильный формат команды: %s", text)
@@ -46,20 +46,20 @@ func (h *Handler) handleDeleteCommand(chatID int64, text string) {
 
 	notes, err := h.store.GetAllNotesByUser(context.Background(), chatID)
 	if err != nil {
-    	log.Printf("ошибка получения заметок: %v", err)
-    	telegram.Send(h.token, chatID, "Не удалось получить заметки", nil)
-    	return
+		log.Printf("ошибка получения заметок: %v", err)
+		telegram.Send(h.token, chatID, "Не удалось получить заметки", nil)
+		return
 	}
 
 	if noteNumber < 1 || noteNumber > len(notes) {
 		telegram.Send(h.token, chatID, "Заметки с таким номером не существует.", nil)
-    	return
+		return
 	} else {
 		noteToDelete := notes[noteNumber-1]
-		
+
 		// Формируем текст сообщения
 		messageText := fmt.Sprintf("Вы уверены, что хотите удалить заметку?\n\n\"%s\"", noteToDelete.Text)
-		
+
 		// Создаем клавиатуру с кнопками подтверждения
 		keyboard := telegram.InlineKeyboardMarkup{
 			InlineKeyboard: [][]telegram.InlineKeyboardButton{
@@ -75,14 +75,12 @@ func (h *Handler) handleDeleteCommand(chatID int64, text string) {
 				},
 			},
 		}
-		
+
 		// Отправляем сообщение с клавиатурой
 		telegram.Send(h.token, chatID, messageText, &keyboard)
 	}
 
 }
-
-
 
 // handleSaveNote обрабатывает сохранение новой заметки.
 func (h *Handler) handleSaveNote(chatID int64, text string) {
@@ -131,7 +129,6 @@ func (h *Handler) handleConfirmDelete(chatID int64, noteID string) {
 	telegram.Send(h.token, chatID, "Заметка успешно удалена! 🗑️", nil)
 }
 
-
 func (h *Handler) handleEditCommand(chatID int64, text string) {
 	var noteNumber int
 	_, err := fmt.Sscanf(text, "/edit %d", &noteNumber)
@@ -154,17 +151,17 @@ func (h *Handler) handleEditCommand(chatID int64, text string) {
 	}
 
 	noteToEdit := notes[noteNumber-1]
-	
+
 	// Формируем сообщение с текущим текстом заметки и скрытым ID
 	messageText := fmt.Sprintf("Текущий текст заметки:\n\n\"%s\"\n\nОтправь новый текст заметки:\nedit_note:%s", noteToEdit.Text, noteToEdit.ID)
-	
+
 	// Создаем ForceReply
 	forceReply := telegram.ForceReply{
 		ForceReply:            true,
 		InputFieldPlaceholder: "Введи новый текст заметки...",
 		Selective:             false,
 	}
-	
+
 	// Отправляем сообщение с ForceReply
 	telegram.Send(h.token, chatID, messageText, &forceReply)
 }
@@ -199,7 +196,7 @@ func (h *Handler) handleReplyMessage(chatID int64, text string, replyToMessage *
 			}
 		}
 	}
-	
+
 	// Если не удалось определить тип ответа, сохраняем как новую заметку
 	h.handleSaveNote(chatID, text)
 }
